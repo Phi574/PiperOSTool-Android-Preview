@@ -1,0 +1,372 @@
+package com.piperostool
+
+import android.content.Context
+import android.content.Intent
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.Rect
+import android.graphics.Typeface
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.View
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updateLayoutParams
+import androidx.fragment.app.Fragment
+import com.google.firebase.auth.FirebaseAuth
+
+class HomeActivity : AppCompatActivity() {
+
+    private lateinit var btnHome: LinearLayout
+    private lateinit var btnBeta: LinearLayout
+    private lateinit var btnApps: LinearLayout
+    private lateinit var btnSettings: LinearLayout
+    private lateinit var btnDevices: LinearLayout
+
+    private lateinit var listIcons: List<ImageView>
+    private lateinit var listTexts: List<TextView>
+
+    private var currentTab = 0
+    private var backPressedTime: Long = 0
+    private var isNavHidden = false
+    private var isNavHiddenByKeyboard = false
+
+    private lateinit var backToast: Toast
+    private val sessionHandler = Handler(Looper.getMainLooper())
+    private var checkingSession = false
+    private var sessionChecksActive = false
+    private var sessionCheckGeneration = 0
+    private var leavingForAccountState = false
+    private val sessionCheck = object : Runnable {
+        override fun run() {
+            verifyAccountSession()
+            sessionHandler.postDelayed(this, SESSION_CHECK_INTERVAL_MS)
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        setContentView(R.layout.activity_home)
+
+        PiperModernUi.watch(this)
+        applyCustomBackground()
+        initViews()
+        setupListeners()
+        setupBackPressHandler()
+        setupKeyboardAwareBottomNav()
+        setupNavigationBarAwareBottomNav()
+
+        currentTab = savedInstanceState?.getInt(STATE_CURRENT_TAB, 0)?.coerceIn(0, 4) ?: 0
+        val restoredPage = supportFragmentManager.findFragmentById(R.id.fragment_container)
+        if (savedInstanceState == null || restoredPage == null) {
+            replaceFragment(fragmentForTab(currentTab))
+        }
+        updateTabUI(currentTab)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt(STATE_CURRENT_TAB, currentTab)
+        super.onSaveInstanceState(outState)
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        updateTabUI(currentTab)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        sessionChecksActive = true
+        sessionCheckGeneration++
+        leavingForAccountState = false
+        sessionHandler.removeCallbacks(sessionCheck)
+        sessionHandler.post(sessionCheck)
+    }
+
+    override fun onStop() {
+        sessionChecksActive = false
+        sessionCheckGeneration++
+        sessionHandler.removeCallbacks(sessionCheck)
+        super.onStop()
+    }
+
+    private fun verifyAccountSession() {
+        if (checkingSession || !sessionChecksActive) return
+        val generation = sessionCheckGeneration
+        checkingSession = true
+        AccountSessionGuard.verify(this) { state ->
+            checkingSession = false
+            if (!sessionChecksActive || generation != sessionCheckGeneration) {
+                return@verify
+            }
+            handleAccountState(state)
+        }
+    }
+
+    private fun handleAccountState(state: AccountSessionState) {
+        if (leavingForAccountState) return
+        when (state) {
+            AccountSessionState.Valid, AccountSessionState.Offline -> Unit
+            is AccountSessionState.Expired -> {
+                leavingForAccountState = true
+                FirebaseAuth.getInstance().signOut()
+                startActivity(Intent(this, LoginActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                })
+            }
+        }
+    }
+
+    private fun applyCustomBackground() {
+        val prefs = AccountDataScope.preferences(this, "PiperPrefs")
+        val hasCustomBg = prefs.getBoolean("has_custom_bg", false)
+        val bgView = findViewById<ImageView>(R.id.homeBackground)
+
+        if (!hasCustomBg) {
+            bgView.visibility = View.GONE
+            return
+        }
+
+        bgView.scaleType = ImageView.ScaleType.CENTER_CROP
+
+        if (hasCustomBg) {
+            try {
+                val file = AccountDataScope.file(this, "appearance", "custom_bg.jpg")
+                if (file.exists()) {
+                    val drawable = android.graphics.drawable.Drawable.createFromPath(file.absolutePath)
+                    bgView.setImageDrawable(drawable)
+                    bgView.visibility = View.VISIBLE
+                } else {
+                    bgView.visibility = View.GONE
+                }
+            } catch (e: Exception) {
+                bgView.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun setupKeyboardAwareBottomNav() {
+        val rootView = findViewById<View>(R.id.homeRoot)
+        val visibleFrame = Rect()
+
+        rootView.viewTreeObserver.addOnGlobalLayoutListener {
+            rootView.getWindowVisibleDisplayFrame(visibleFrame)
+            val screenHeight = rootView.rootView.height
+            val keyboardHeight = screenHeight - visibleFrame.bottom
+            val isKeyboardVisible = keyboardHeight > screenHeight * 0.15f
+
+            if (isKeyboardVisible && !isNavHiddenByKeyboard) {
+                hideBottomNav(force = true)
+                isNavHiddenByKeyboard = true
+            } else if (!isKeyboardVisible && isNavHiddenByKeyboard) {
+                showBottomNav(force = true)
+                isNavHiddenByKeyboard = false
+            }
+        }
+    }
+
+    private fun setupNavigationBarAwareBottomNav() {
+        val root = findViewById<View>(R.id.homeRoot)
+        val bottomBar = findViewById<View>(R.id.bottomNavCard)
+        val baseBottomMargin = dp(16)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val navigationInset = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            bottomBar.updateLayoutParams<ConstraintLayout.LayoutParams> {
+                bottomMargin = baseBottomMargin + navigationInset
+            }
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
+    }
+
+    private fun setupBackPressHandler() {
+        val callback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (currentTab == 0 &&
+                    (supportFragmentManager.findFragmentById(R.id.fragment_container) as? homeFragment)
+                        ?.closeWindowDrawer() == true
+                ) return
+                if (currentTab != 0) {
+                    replaceFragment(homeFragment())
+                    currentTab = 0
+                    updateTabUI(0)
+                    showBottomNav(force = true)
+                    return
+                }
+
+                if (backPressedTime + 2000 > System.currentTimeMillis()) {
+                    backToast.cancel()
+                    finish()
+                } else {
+                    backToast = Toast.makeText(baseContext, R.string.home_press_again_to_exit, Toast.LENGTH_SHORT)
+                    backToast.show()
+                }
+                backPressedTime = System.currentTimeMillis()
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, callback)
+    }
+
+    private fun initViews() {
+        btnHome = findViewById(R.id.navHome)
+        btnBeta = findViewById(R.id.navBeta)
+        btnApps = findViewById(R.id.navApps)
+        btnSettings = findViewById(R.id.navSettings)
+        btnDevices = findViewById(R.id.navDevices)
+
+        listIcons = listOf(
+            findViewById(R.id.iconHome),
+            findViewById(R.id.iconNews),
+            findViewById(R.id.iconApps),
+            findViewById(R.id.iconSettings),
+            findViewById(R.id.iconDevices)
+        )
+
+        listTexts = listOf(
+            findViewById(R.id.txtHome),
+            findViewById(R.id.txtNews),
+            findViewById(R.id.txtApps),
+            findViewById(R.id.txtSettings),
+            findViewById(R.id.txtDevices)
+        )
+    }
+
+    private fun setupListeners() {
+        btnHome.setOnClickListener {
+            if (currentTab != 0) {
+                replaceFragment(homeFragment())
+                currentTab = 0
+                updateTabUI(0)
+                showBottomNav(force = true)
+            }
+        }
+        btnBeta.setOnClickListener {
+            if (currentTab != 1) {
+                replaceFragment(BetaFragment())
+                currentTab = 1
+                updateTabUI(1)
+                showBottomNav(force = true)
+            }
+        }
+        btnApps.setOnClickListener {
+            if (currentTab != 2) {
+                replaceFragment(AppsFragment())
+                currentTab = 2
+                updateTabUI(2)
+                showBottomNav(force = true)
+            }
+        }
+        btnSettings.setOnClickListener {
+            if (currentTab != 3) {
+                replaceFragment(SettingFragment())
+                currentTab = 3
+                updateTabUI(3)
+                showBottomNav(force = true)
+            }
+        }
+        btnDevices.setOnClickListener {
+            if (currentTab != 4) {
+                replaceFragment(InfoFragment())
+                currentTab = 4
+                updateTabUI(4)
+                showBottomNav(force = true)
+            }
+        }
+    }
+
+    private fun replaceFragment(fragment: Fragment) {
+        val transaction = supportFragmentManager.beginTransaction()
+        // Commit synchronously so the new page is ready before the next frame.
+        transaction.setReorderingAllowed(true)
+        transaction.replace(R.id.fragment_container, fragment)
+        transaction.commitNow()
+        val page = fragment.view ?: return
+        page.alpha = 0f
+        page.translationY = dp(6).toFloat()
+        page.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(170L)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .withLayer()
+            .start()
+    }
+
+    private fun fragmentForTab(index: Int): Fragment = when (index) {
+        1 -> BetaFragment()
+        2 -> AppsFragment()
+        3 -> SettingFragment()
+        4 -> InfoFragment()
+        else -> homeFragment()
+    }
+
+    private fun updateTabUI(selectedIndex: Int) {
+        val dark = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val activeColorCode = Color.parseColor(if (dark) "#8DD7FF" else "#156A9A")
+        val unselectedColor = Color.parseColor(if (dark) "#A2B0BC" else "#8D98A1")
+
+        for (i in listIcons.indices) {
+            if (i == selectedIndex) {
+                listIcons[i].imageTintList = ColorStateList.valueOf(activeColorCode)
+                listTexts[i].setTextColor(activeColorCode)
+                listTexts[i].setTypeface(listTexts[i].typeface, Typeface.BOLD)
+            } else {
+                listIcons[i].imageTintList = ColorStateList.valueOf(unselectedColor)
+                listTexts[i].setTextColor(unselectedColor)
+                listTexts[i].setTypeface(listTexts[i].typeface, Typeface.NORMAL)
+            }
+        }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    fun hideBottomNav(force: Boolean = false) {
+        if (!force && currentTab != 2) return
+        if (isNavHidden) return
+
+        val bottomBar = findViewById<View>(R.id.bottomNavCard)
+
+        bottomBar?.let {
+            it.animate().cancel()
+            it.animate()
+                .translationY(it.height.toFloat() + 50f)
+                .setInterpolator(android.view.animation.AccelerateInterpolator())
+                .setDuration(250)
+                .start()
+            isNavHidden = true
+        }
+    }
+
+    fun showBottomNav(force: Boolean = false) {
+        if (!force && isNavHiddenByKeyboard) return
+        if (!isNavHidden) return
+
+        val bottomBar = findViewById<View>(R.id.bottomNavCard)
+
+        bottomBar?.let {
+            it.animate().cancel()
+            it.animate()
+                .translationY(0f)
+                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                .setDuration(250)
+                .start()
+            isNavHidden = false
+        }
+    }
+
+    companion object {
+        private const val SESSION_CHECK_INTERVAL_MS = 10_000L
+        private const val STATE_CURRENT_TAB = "home.current_tab"
+    }
+}

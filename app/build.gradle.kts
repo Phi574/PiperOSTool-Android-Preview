@@ -1,0 +1,151 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.File
+import java.util.Properties
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+}
+
+val googleServicesConfig = file("google-services.json")
+val testPackage = providers.gradleProperty("piperTestPackage").orNull == "true"
+val piperVersionCode = providers.gradleProperty("piperVersionCode").orNull?.toIntOrNull() ?: 107
+val piperVersionName = providers.gradleProperty("piperVersionName").orNull ?: "3.9.0.PRE"
+val piperSigningPropertiesFile = File(System.getProperty("user.home"), ".android/PiperOS/signing.properties")
+val piperSigningProperties = Properties().apply {
+    if (piperSigningPropertiesFile.isFile) {
+        piperSigningPropertiesFile.inputStream().use(::load)
+    }
+}
+val piperReleaseSigningConfigured = piperSigningPropertiesFile.isFile
+if (googleServicesConfig.isFile) {
+    apply(plugin = "com.google.gms.google-services")
+    apply(plugin = "com.google.firebase.firebase-perf")
+} else {
+    logger.warn("google-services.json is missing; Firebase integration is disabled for this build.")
+}
+
+android {
+    namespace = "com.piperostool"
+    signingConfigs.configureEach {
+        enableV2Signing = true
+        enableV3Signing = true
+    }
+    if (piperReleaseSigningConfigured) {
+        signingConfigs.create("piperRelease") {
+            storeFile = file(piperSigningProperties.getProperty("storeFile"))
+            storePassword = piperSigningProperties.getProperty("storePassword")
+            keyAlias = piperSigningProperties.getProperty("keyAlias")
+            keyPassword = piperSigningProperties.getProperty("keyPassword")
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
+    compileSdk {
+        version = release(37)
+    }
+
+    defaultConfig {
+        applicationId = if (testPackage) "com.piper.os.tool.test" else "com.piper.os.tool"
+        // Android 10 (API 29) is the supported baseline for the current UI,
+        // scoped-storage model and media/remote features.
+        minSdk = 29
+        targetSdk = 37
+        multiDexEnabled = true
+        multiDexKeepProguard = file("multidex-keep.pro")
+        versionCode = piperVersionCode
+        versionName = piperVersionName
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+    }
+
+
+    buildTypes {
+        debug {
+            if (piperReleaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("piperRelease")
+            }
+        }
+        release {
+            isMinifyEnabled = false
+            if (piperReleaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("piperRelease")
+            }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+    externalNativeBuild {
+        ndkBuild {
+            path = file("src/main/jni/Android.mk")
+        }
+    }
+    buildFeatures {
+        aidl = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_11
+    }
+}
+
+dependencies {
+    implementation(files("libs/reandroid-apkeditor-1.4.9.jar"))
+    implementation(files("libs/reandroid-arsclib.jar"))
+    implementation(files("libs/reandroid-smali.jar"))
+    implementation(files("libs/reandroid-jcommand.jar"))
+    implementation(libs.androidx.core.ktx)
+    implementation("androidx.activity:activity-ktx:1.10.1")
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(platform("com.google.firebase:firebase-bom:35.0.1"))
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-inappmessaging-display")
+    implementation("com.google.firebase:firebase-perf")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
+    implementation("com.google.firebase:firebase-auth")
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1")
+    implementation("com.google.crypto.tink:tink-android:1.23.0")
+    implementation("com.google.android.material:material:1.12.0")
+    implementation("com.hbb20:ccp:2.7.3")
+    implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.webkit:webkit:1.14.0")
+    implementation("com.google.firebase:firebase-database")
+    implementation("com.google.android.gms:play-services-location:21.4.0")
+    implementation(libs.glide)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.session)
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
+    implementation("com.android.tools.build:apksig:8.13.2")
+    implementation("androidx.documentfile:documentfile:1.1.0")
+    implementation("androidx.viewpager2:viewpager2:1.1.0")
+    implementation("net.lingala.zip4j:zip4j:2.11.6")
+    implementation("org.apache.commons:commons-compress:1.28.0")
+    implementation("org.tukaani:xz:1.12")
+    implementation("com.github.luben:zstd-jni:1.5.7-10@aar")
+    implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
+    implementation("com.github.MuntashirAkon:sun-security-android:1.1")
+    implementation("org.conscrypt:conscrypt-android:2.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+}

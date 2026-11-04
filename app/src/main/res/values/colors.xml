@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="modern_surface">#FFFFFFFF</color>
+    <color name="modern_surface_soft">#FFF3F6F8</color>
+    <color name="modern_border">#FFDDE5EA</color>
+    <color name="piper_window_background">#090D10</color>
+    <color name="home_nav_surface">#FFFDFEFF</color>
+    <color name="home_nav_border">#FFDCE3E8</color>
+    <color name="home_nav_selected">#FFE7F2F6</color>
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="green_neon">#00FF00</color>
+    <color name="bg_dark">#121212</color> <color name="card_dark">#1E1E1E</color> <color name="neon_green">#00FF00</color> <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B0B0B0</color>
+    <color name="nav_selected">#000000</color> <color name="nav_unselected">#BDBDBD</color> <color name="nav_bg">#FFFFFF</color> <color name="badge_red">#FF3D00</color>
+    <color name="chip_todo">#FFC107</color> <color name="chip_progress">#00FF00</color> <color name="chip_pending">#FF5722</color>
+    <color name="remote_page_background">#FFFDFD</color>
+    <color name="remote_surface">#FFFDFD</color>
+    <color name="remote_text_primary">#171A1D</color>
+    <color name="remote_text_secondary">#687078</color>
+    <color name="remote_border">#1F171A1D</color>
+    <color name="remote_accent">#087F5B</color>
+</resources>
