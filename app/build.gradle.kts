@@ -140,7 +140,7 @@ dependencies {
     implementation("net.lingala.zip4j:zip4j:2.11.6")
     implementation("org.apache.commons:commons-compress:1.28.0")
     implementation("org.tukaani:xz:1.12")
-    implementation("com.github.luben:zstd-jni:1.5.7-10@aar")
+    implementation("com.github.luben:zstd-jni:1.5.7-25@aar")
     implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
     implementation("com.github.MuntashirAkon:sun-security-android:1.1")
     implementation("org.conscrypt:conscrypt-android:2.5.3")
