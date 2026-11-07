@@ -2,7 +2,7 @@
   <img src="app/src/main/ic_launcher-playstore.png" width="112" alt="PiperOS Tool">
 </p>
 
-<h1 align="center">PiperOS Tool for Android</h1>
+<h1 align="center">PiperOS Tool for Android Preview</h1>
 
 <p align="center">
   Bộ công cụ Android tích hợp quản lý ứng dụng và tệp, APK Editor, trình duyệt, media, điều khiển thiết bị, xác thực 2FA và các tiện ích hệ thống.
