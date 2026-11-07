@@ -3,7 +3,7 @@
   "homeWindow": [
     {
       "id": "personal_info",
-      "enabled": false,
+      "enabled": true,
       "title": {
         "vi": "Thông tin cá nhân",
         "en": "Personal information"
